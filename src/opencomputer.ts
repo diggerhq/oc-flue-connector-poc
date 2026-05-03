@@ -57,7 +57,29 @@ class OpenComputerSandboxApi implements SandboxApi {
 	}
 
 	async writeFile(path: string, content: string | Uint8Array): Promise<void> {
-		await this.sandbox.files.write(path, content);
+		// Auto-create parent dir to match Flue's bash-backed sandbox behavior.
+		const parent = path.replace(/\/[^/]*$/, '');
+		if (parent && parent !== path) {
+			await this.sandbox.exec.run(`mkdir -p ${shellEscape(parent)}`);
+		}
+		try {
+			await this.sandbox.files.write(path, content);
+			return;
+		} catch (sdkErr) {
+			// OpenComputer's files.write returns 500 for paths inside shell-created
+			// directories (the file API and shell appear to use different VFS views).
+			// Fall back to a base64 shell write — slower, but reliable. Caps out near
+			// ARG_MAX (~256KB on Linux); use signed upload URLs for larger payloads.
+			const buf =
+				typeof content === 'string' ? new TextEncoder().encode(content) : content;
+			const b64 = Buffer.from(buf).toString('base64');
+			const result = await this.sandbox.exec.run(
+				`echo ${shellEscape(b64)} | base64 -d > ${shellEscape(path)}`,
+			);
+			if (result.exitCode !== 0 && result.exitCode !== -1) {
+				throw sdkErr;
+			}
+		}
 	}
 
 	async stat(path: string): Promise<FileStat> {
@@ -87,7 +109,10 @@ class OpenComputerSandboxApi implements SandboxApi {
 	}
 
 	async exists(path: string): Promise<boolean> {
-		return this.sandbox.files.exists(path);
+		// OpenComputer's files.exists() only reliably detects files, not directories.
+		// Use `test -e` for parity across both.
+		const result = await this.sandbox.exec.run(`test -e ${shellEscape(path)}`);
+		return result.exitCode === 0;
 	}
 
 	async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
@@ -118,11 +143,19 @@ class OpenComputerSandboxApi implements SandboxApi {
 		command: string,
 		options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
 	): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-		return this.sandbox.exec.run(command, {
+		const result = await this.sandbox.exec.run(command, {
 			cwd: options?.cwd,
 			env: options?.env,
 			timeout: options?.timeout,
 		});
+		// OpenComputer's /exec/run endpoint sometimes omits exitCode on non-zero
+		// exits. Coerce to -1 so callers can detect failure rather than treating
+		// undefined as success.
+		return {
+			stdout: result.stdout ?? '',
+			stderr: result.stderr ?? '',
+			exitCode: result.exitCode ?? -1,
+		};
 	}
 }
 

@@ -12,7 +12,7 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasing": true,
+    "forceConsistentCasingInFileNames": true,
     "verbatimModuleSyntax": false,
     "resolveJsonModule": true
   },

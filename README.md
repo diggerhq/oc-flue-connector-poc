@@ -173,8 +173,22 @@ await session.prompt(
 ## Caveats
 
 - `stat()` shells out to `stat(1)` — minor latency on filesystems with thousands of stats per turn. If this matters, request a native stat endpoint upstream.
+- `exists()` shells out to `test -e` because `files.exists()` only reliably detects files, not directories.
 - `mkdir({ recursive: true })` and `rm({ recursive: true })` likewise shell out, since the SDK methods are single-level.
+- `writeFile()` falls back to a base64 shell write when `files.write()` returns 500 (which it does for paths inside shell-created directories — the file API and shell appear to use different VFS views). The fallback caps out near `ARG_MAX` (~256KB on Linux); use `sandbox.uploadUrl()` directly for larger payloads.
+- `exec()` coerces `undefined` exit codes to `-1` because OpenComputer's `/exec/run` endpoint sometimes omits exit codes for non-zero exits. Treat negative values as "process failed, exact code unknown."
 - `cwd` defaults to `/workspace`. If your template's `WORKDIR` is different (e.g. `/app`), pass `{ cwd: '/app' }` to the connector.
+
+## Testing
+
+A smoke test in `test/smoke.ts` provisions a real sandbox, exercises every `SandboxApi` method, then kills the sandbox.
+
+```bash
+npm install
+OPENCOMPUTER_API_KEY=osb_... npm run smoke
+```
+
+Runs in ~6 seconds and costs cents. Note that OpenComputer's wire layer occasionally hangs (a single exec can stall for 60–120s); re-run if a test times out.
 
 ## Contributing
 

@@ -19,7 +19,8 @@
   ],
   "scripts": {
     "build": "tsc",
-    "check:types": "tsc --noEmit"
+    "check:types": "tsc --noEmit",
+    "smoke": "tsx test/smoke.ts"
   },
   "keywords": [
     "flue",
@@ -49,6 +50,7 @@
   "devDependencies": {
     "@flue/sdk": "*",
     "@opencomputer/sdk": "*",
+    "tsx": "^4.21.0",
     "typescript": "^5.4.0"
   }
 }
