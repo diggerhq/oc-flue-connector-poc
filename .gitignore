@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.log
+.env
+.env.*
+.DS_Store
+
+# Local preview helper — not part of the package
+preview.html
+.gstack/
